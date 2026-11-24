@@ -14,6 +14,7 @@ public class Monitor {
 
     private static final String REGGIE_HOST = "reggie";
     private static final int INTERVALO_SEGUNDOS = 3;
+    private static final int MAX_ID = 100; // faixa de ids verificada a cada ciclo
 
     public static void main(String[] args) throws Exception {
         System.setProperty("java.security.policy", "security.policy");
@@ -33,31 +34,22 @@ public class Monitor {
     }
 
     private static int contarTarefas(JavaSpace space) throws Exception {
-        TaskEntry template = new TaskEntry(null, null, null);
         int count = 0;
 
-        // TODO: use read() ou take() aqui — qual você deve usar e por quê?
+        // read() e nao take(): read() so copia a entrada, take() removeria a
+        // tarefa do espaco e o monitor "roubaria" trabalho do consumidor.
         //
-        // Dica: o espaço de tuplas não tem operação count().
-        // Você precisa ler as entradas uma a uma para contá-las.
-        // Pense: se você usar take(), o que acontece com as tarefas?
-        //
-        // Substitua o null abaixo pela chamada correta:
-        //
-        //   TaskEntry encontrada = (TaskEntry) space.???(template, null, 0);
-        //
-        // Use timeout = 0 (JavaSpace.NO_WAIT) para não bloquear quando não houver mais entradas.
-        //
-        // Atenção: read() com timeout=0 pode retornar a mesma entrada mais de uma vez —
-        // o Outrigger não garante ordem nem variedade entre chamadas sucessivas.
-        // Para contar corretamente, você precisaria de um campo id único por tarefa
-        // e rastrear quais ids já foram vistos. Esse problema não tem solução limpa
-        // com a API pura do espaço de tuplas — é justamente a limitação que o Nível 2B explora.
-
-        TaskEntry encontrada = null; // ← substitua esta linha
-
-        if (encontrada != null) {
-            count = 1; // ← implemente a contagem real acima e remova esta linha
+        // Nao existe count(), e ler varias vezes o mesmo template com NO_WAIT
+        // devolve sempre a mesma entrada (testado: contava 1 o tempo todo).
+        // Por isso o monitor faz um read() por id, com um template que fixa o
+        // id e deixa os outros campos como curinga. Funciona porque os ids sao
+        // inteiros de 1 a MAX_ID; tarefas fora dessa faixa nao seriam contadas.
+        for (int id = 1; id <= MAX_ID; id++) {
+            TaskEntry porId = new TaskEntry(id, null, null);
+            TaskEntry encontrada = (TaskEntry) space.read(porId, null, JavaSpace.NO_WAIT);
+            if (encontrada != null) {
+                count++;
+            }
         }
 
         return count;
